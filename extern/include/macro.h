@@ -6,9 +6,28 @@
 #include <cstdio>
 #include <bitset>
 #include <vector>
+#include <thrust/complex.h>
+#include <thrust/transform_scan.h>
+#include <thrust/execution_policy.h>
 
 namespace diffRender
 {
+#define LOG_ERROR_COLOR "\033[1;31m"
+#define LOG_WARNING_COLOR "\033[1;33m"
+#define LOG_INFO_COLOR "\033[1;32m"
+#define LOG_DEBUG_COLOR "\033[1;34m"
+#define LOG_RESET_COLOR "\033[0m"
+#define LOG_BOLD_COLOR "\033[1m"
+
+#define LOG_FILE std::cout
+#define LOG(x) LOG_FILE << x << std::endl;
+#define LOG_ERROR(x) LOG_FILE << LOG_ERROR_COLOR << x << LOG_RESET_COLOR << std::endl;
+#define LOG_WARNING(x) LOG_FILE << LOG_WARNING_COLOR << x << LOG_RESET_COLOR << std::endl;
+#define LOG_INFO(x) LOG_FILE << LOG_INFO_COLOR << x << LOG_RESET_COLOR << std::endl;
+#define LOG_DEBUG(x) LOG_FILE << LOG_DEBUG_COLOR << x << LOG_RESET_COLOR << std::endl;
+#define LOG_LINE(x) LOG_FILE << LOG_BOLD_COLOR << "---------------" << x << "---------------" << LOG_RESET_COLOR << std::endl;
+#define LOG_INLINE(x) LOG_FILE << x;
+
 #define TICK_PRECISION 3
 #define TICK(x) auto bench_##x = std::chrono::steady_clock::now();
 #define TICK_INLINE(x) auto bench_inline_##x = std::chrono::steady_clock::now();
@@ -30,8 +49,29 @@ namespace diffRender
 #define CPU_FUNC __host__
 #define RAND_F (float)rand() / (float)RAND_MAX
 #define RAND_I(min, max) (min + rand() % (max - min + 1))
+#define BDF2(x) 0.5 * ((x) * (x)-4 * (x) + 3)
 
-	typedef float real;
+	typedef float real_t;
+	const real_t EPS = 1e-8f;
+	typedef thrust::complex<real_t> cpx;
+
+	enum cpx_phase
+	{
+		CPX_REAL,
+		CPX_IMAG,
+		CPX_ABS,
+	};
+
+	enum PlaneType
+	{
+		XY,
+		XZ,
+		YZ,
+	};
+
+	typedef std::vector<real_t> RealVec;
+	typedef std::vector<cpx> ComplexVec;
+
 	static inline void checkCudaError(const char *msg)
 	{
 		cudaError_t err = cudaGetLastError();
@@ -40,6 +80,17 @@ namespace diffRender
 			// printf( "CUDA error: %d : %s at %s:%d \n", err, cudaGetErrorString(err), __FILE__, __LINE__);
 			throw std::runtime_error(std::string(msg) + ": " + cudaGetErrorString(err));
 		}
+	}
+
+#define atomicAddCpx(dst, value)                         \
+	{                                                    \
+		atomicAdd((float *)(dst), (value).real());       \
+		atomicAdd(((float *)(dst)) + 1, (value).imag()); \
+	}
+#define atomicAddCpxBlock(dst, value)                          \
+	{                                                          \
+		atomicAdd_block((float *)(dst), (value).real());       \
+		atomicAdd_block(((float *)(dst)) + 1, (value).imag()); \
 	}
 
 #ifdef NDEBUG
@@ -114,4 +165,58 @@ namespace diffRender
 		cuSynchronize();                                  \
 	}
 
+#define SHOW(x) std::cout << #x << ":\n" \
+						  << x << std::endl;
+
+	static std::ostream &operator<<(std::ostream &o, float3 const &f)
+	{
+		return o << "(" << f.x << ", " << f.y << ", " << f.z << ")";
+	}
+	static std::ostream &operator<<(std::ostream &o, uint3 const &f)
+	{
+		return o << "(" << f.x << ", " << f.y << ", " << f.z << ")";
+	}
+	static std::ostream &operator<<(std::ostream &o, int3 const &f)
+	{
+		return o << "(" << f.x << ", " << f.y << ", " << f.z << ")";
+	}
+	static std::ostream &operator<<(std::ostream &o, int4 const &a)
+	{
+		return o << "(" << a.x << ", " << a.y << ", " << a.z << ", " << a.w << ")";
+	}
+
+	class Range
+	{
+	public:
+		uint start;
+		uint end;
+		Range(uint start, uint end) : start(start), end(end) {}
+		Range() : start(0), end(0) {}
+		int length(){
+			return end - start;
+		}
+		friend std::ostream &operator<<(std::ostream &os, const Range &r)
+		{
+			os << "[" << r.start << "," << r.end << ")";
+			return os;
+		}
+	};
+
+	class BBox
+	{
+	public:
+		float3 min;
+		float3 max;
+		float width;
+		BBox(){}
+		BBox(float3 _min, float3 _max){
+            min = _min;
+            max = _max;
+        }
+		friend std::ostream &operator<<(std::ostream &os, const BBox &b)
+		{
+			os << "[" << b.min << "," << b.max << "]";
+			return os;
+		}
+	};
 }
