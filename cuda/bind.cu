@@ -1,6 +1,7 @@
 #include <torch/extension.h>
 #include <torch/script.h>
 #include <torch/torch.h>
+#include "common.h"
 
 __global__ void custom_cuda_kernel(float *a, float *b, float *c, int n)
 {

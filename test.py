@@ -7,7 +7,7 @@ os.environ["TORCH_EXTENSIONS_DIR"] = os.path.join("cuda", "build")
 Debug = False # compile with debug flag
 verbose = True # show compile command
 cuda_files = glob("cuda/*.cu") # source files
-include_dirs = ["cuda"] # include directories
+include_dirs = ["cuda/include"] # include directories
 cflags = "--extended-lambda --expt-relaxed-constexpr " # nvcc flags
 if Debug:
     cflags += "-G -g -O0"
